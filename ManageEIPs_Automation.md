@@ -2847,8 +2847,72 @@ git push -u origin main
 
 
 ### 13.6 Release/Versioning (optional)
-- Tagging a stable version (v1.0)
-- Changelog note (optional)
+- Repo renders README properly
+- Markdown links work
+- No secrets committed (final sanity check)
+
+#### 13.6.1 Verify push succeeded (CLI)
+```bash
+git status
+git log --oneline -n 5
+```
+**Expected output: branch is up to date with 'origin/main', except for the markdown document, still being edited**
+**Check what changed (updated markdown)**
+```bash
+git diff
+```
+
+**Stage**
+```bash
+git add ManageEIPs_Automation.md
+```
+
+**Commit**
+```bash
+git commit -m "docs: update ManageEIPs_Automation"        # 1 file changed, 55 insertions(+), 22 deletions(-)
+```
+
+**Push**
+```bash
+git push
+```
+
+**Verify**
+```bash
+git status
+git log --oneline -n 5
+```
+**Expected output: local brand and GitHub are now synchronised**
+eaf773f (HEAD -> main, origin/main) docs: update ManageEIPs_Automation
+515a7a5 chore: initialize repo with docs, lambda, and jq helpers
+
+#### 13.6.2  Verify files on GitHub (UI)
+- GitHub > Your Repositories > Click ManageEIPs-1region > Refresh page > check latest commit + list of present files 
+- Click README.md to confirm it renders properly
+- Go back > click on ManageEIPs_Automation.md: check code blocks render properly.
+
+#### 13.6.3 Final sanity check: no secrets committed (CLI)
+**Checking filenames**
+```bash
+git ls-files | grep -Ei "(\.pem|\.key|\.p12|\.pfx|\.env|tfstate|credentials|secret|token|response.*\.json|event\.json)" || true
+```
+**Expected output:**
+No output. That’s the desired outcome: it means none of the tracked files match those risky patterns.
+
+**Checking file contents on the repository**
+```bash
+git grep -nE "(AKIA|ASIA|aws_secret_access_key|aws_access_key_id|BEGIN RSA PRIVATE KEY)" || true
+```
+**Expected output:**
+No output. That’s the desired outcome, once again: it means none of those strings appear in tracked files.
+
+#### 13.6.4 Check repo has no ignored artifacts staged
+```bash
+git status --ignored
+```
+The only uncommitted edit is, as before, `ManageEIPs_Automation.md`. This was to be expected as it is still being edited.
+
+
 
 
 ### 13.7 Post-publish verification
