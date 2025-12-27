@@ -2913,9 +2913,51 @@ git status --ignored
 The only uncommitted edit is, as before, `ManageEIPs_Automation.md`. This was to be expected as it is still being edited.
 
 
+### 13.7 Release/Versioning
+#### 13.7.0 Important note (timing)
+This repository’s documentation (`ManageEIPs_Automation.md`) is still being updated, and the `README.md` will be revised again after the documentation is final.
+Therefore do not create the final release tag (`v1.0.0`) until:
+- `ManageEIPs_Automation.md` is finished.
+- `README.md` has been updated to its final version.
+
+We can still commit and push changes normally while documentation is in progress.
 
 
-### 13.7 Post-publish verification
-- Repo renders README properly
-- Markdown links work
-- No secrets committed (final sanity check)
+#### 13.7.1 Normal workflow while docs are still changing (commit + push)
+```bash
+git status
+git add ManageEIPs_Automation.md README.md
+git commit -m "docs: update documentation"
+git push
+```
+
+#### 13.7.2 Pre-release tag while docs are WIP (Work-In-Progress)
+It provides a visible milestone before the final documentation is complete.
+**Create pre-release tag**
+```bash
+git tag -a v0.1.0 -m "v0.1.0 work in progress (docs not final)"
+git push origin v0.1.0
+```
+**In GitHub**
+- repo `ManageEIPs-1region` > Releases > Create a new release > Select tag: `v0.1.0` > tick "Set as a pre-release"
+- Release title: `v0.1.0` (WIP) > Publish release
+
+#### 13.7.3 Final release when documentation is complete (v1.0.0)
+**Prerequisite: workijg tree clean**
+```bash
+git status
+```
+
+**Create final tag**
+```bash
+git tag -a v1.0.0 -m "v1.0.0 first portfolio release"
+git push origin v1.0.0
+```
+
+**Create GitHub Release (UI)**
+- repo `ManageEIPs-1region` > Releases > Create a new release > Select tag: `v0.1.0` > tick "Set as a pre-release"
+- Release title: `v0.1.0` > Publish release
+
+**Verify**
+- Repo > Releases
+- Confirm `v1.0.0` points to the intended commit.
