@@ -66,6 +66,7 @@ This ensures the correct AWS account is in use before proceeding.
 cat ~/.aws/credentials
 ```
 
+
 ### 0.2 Tooling and CLI behavior
 **Install jq (JSON formatter) in WSL, if not already done (which it was):**
 ```bash
@@ -76,6 +77,7 @@ sudo apt install -y jq
 ```bash
 aws configure set cli_pager ""
 ```
+
 
 ### 0.3 Global environment variables and tagging conventions
 Initialize AWS CLI environment variables for the current shell session.
@@ -109,6 +111,7 @@ export TAG_COSTCENTER="Portfolio"
 - Owner
 - ManagedBy
 - CostCenter
+
 
 ### 0.4 Reusable jq filters (one-time setup)
 #### 0.4.1 Creating the reusable filter file `flatten_tags.jq`:
@@ -2288,7 +2291,7 @@ jq -c '.' response.json
 Status: PASS — Lambda executed successfully via alias live.
 
 
-### 10.9 — Verify Elastic IP state after Lambda execution
+### 10.9 Verify Elastic IP state after Lambda execution
 **Purpose:**
 Confirm functional correctness:
 - attached EIP still present and associated with ManageEIPs-ec2.
@@ -2454,6 +2457,96 @@ The ManageEIPs Lambda correctly identified managed resources, released unused El
 Status: PASS.
 
 
+### 10.10 Monitoring (SNS + CloudWatch alarms + dashboard)
+**Purpose:**
+- Create alerting/visibility resources that were referenced in teardown (CloudWatch alarms, dashboard, SNS topic).
+- Keep outputs auditable (JSONL) and avoid Console.
+
+#### 10.10.1 SNS topic for alarm notifications
+**Create the SNS topic used by CloudWatch alarms, then tag it and emit a JSONL record**
+```bash
+SNS_TOPIC_ARN=$(aws sns create-topic --name "ManageEIPs-Alarms" --region "$AWS_REGION" --no-cli-pager | jq -r '.TopicArn'); 
+aws sns tag-resource --resource-arn "$SNS_TOPIC_ARN" --tags Key=Name,Value="ManageEIPs-Alarms" Key=Project,Value="$TAG_PROJECT" Key=Component,Value="SNS" Key=Environment,Value="$TAG_ENV" Key=Owner,Value="$TAG_OWNER" Key=ManagedBy,Value="$TAG_MANAGEDBY" Key=CostCenter,Value="$TAG_COSTCENTER" --region "$AWS_REGION" --no-cli-pager >/dev/null 2>&1; 
+jq -c -n --arg arn "$SNS_TOPIC_ARN" '{TopicArn:$arn,Created:true,Tagged:true}'
+```
+**Example output:**
+```json
+{"TopicArn":"arn:aws:sns:us-east-1:180294215772:ManageEIPs-Alarms","Created":true,"Tagged":true}
+```
+
+#### 10.10.2 SNS email subscription
+**This creates an email subscription; AWS will send a confirmation email that must be confirmed before notifications work**
+```bash
+ALARM_EMAIL="you@example.com"
+aws sns subscribe --topic-arn "$SNS_TOPIC_ARN" --protocol email --notification-endpoint "$ALARM_EMAIL" --region "$AWS_REGION" --no-cli-pager | jq -c --arg e "$ALARM_EMAIL" --arg t "$SNS_TOPIC_ARN" '{TopicArn:$t,Protocol:"email",Endpoint:$e,SubscriptionArn:(.SubscriptionArn//"pending-confirmation")}'
+```
+**Example output:**
+```json
+{"TopicArn":"arn:aws:sns:us-east-1:180294215772:ManageEIPs-Alarms","Protocol":"email","Endpoint":"you@example.com","SubscriptionArn":"pending confirmation"}
+```
+
+#### 10.10.3 CloudWatch alarms (Errors / Throttles / Duration)
+These alarms watch the Lambda function and notify the SNS topic
+
+##### 10.10.3.1 Alarm: Errors
+```bash
+aws cloudwatch put-metric-alarm --alarm-name "ManageEIPs-Errors" --alarm-description "Lambda Errors >= 1" --namespace "AWS/Lambda" --metric-name "Errors" --dimensions Name=FunctionName,Value=ManageEIPs --statistic Sum --period 300 --evaluation-periods 1 --threshold 1 --comparison-operator GreaterThanOrEqualToThreshold --treat-missing-data notBreaching --alarm-actions "$SNS_TOPIC_ARN" --region "$AWS_REGION" --no-cli-pager >/dev/null 2>&1; jq -c -n '{AlarmName:"ManageEIPs-Errors",Created:true}'
+```
+**Example output:**
+```json
+{"AlarmName":"ManageEIPs-Errors","Created":true}
+```
+
+##### 10.10.3.2 Alarm: Throttles 
+```bash
+aws cloudwatch put-metric-alarm --alarm-name "ManageEIPs-Throttles" --alarm-description "Lambda Throttles >= 1" --namespace "AWS/Lambda" --metric-name "Throttles" --dimensions Name=FunctionName,Value=ManageEIPs --statistic Sum --period 300 --evaluation-periods 1 --threshold 1 --comparison-operator GreaterThanOrEqualToThreshold --treat-missing-data notBreaching --alarm-actions "$SNS_TOPIC_ARN" --region "$AWS_REGION" --no-cli-pager >/dev/null 2>&1; jq -c -n '{AlarmName:"ManageEIPs-Throttles",Created:true}'
+```
+**Example output:**
+```json
+{"AlarmName":"ManageEIPs-Throttles","Created":true}
+```
+
+##### 10.10.3.3 Alarm: Duration (p95) 
+```bash
+aws cloudwatch put-metric-alarm --alarm-name "ManageEIPs-DurationHigh" --alarm-description "Lambda Duration p95 >= 3000ms" --namespace "AWS/Lambda" --metric-name "Duration" --dimensions Name=FunctionName,Value=ManageEIPs --extended-statistic p95 --period 300 --evaluation-periods 1 --threshold 3000 --comparison-operator GreaterThanOrEqualToThreshold --treat-missing-data notBreaching --alarm-actions "$SNS_TOPIC_ARN" --region "$AWS_REGION" --no-cli-pager >/dev/null 2>&1; jq -c -n '{AlarmName:"ManageEIPs-DurationHigh",Created:true}'
+```
+**Example output:**
+```json
+{"AlarmName":"ManageEIPs-DurationHigh","Created":true}
+```
+
+##### 10.10.3.4 Verify alarms exist (JSONL, one object per alarm) 
+```bash
+aws cloudwatch describe-alarms --alarm-names "ManageEIPs-Errors" "ManageEIPs-Throttles" "ManageEIPs-DurationHigh" --region "$AWS_REGION" --no-cli-pager | jq -c '.MetricAlarms[]? | {AlarmName:.AlarmName,StateValue:.StateValue,Namespace:.Namespace,MetricName:.MetricName}'
+```
+**Example output:**
+```json
+{"AlarmName":"ManageEIPs-DurationHigh","StateValue":"OK","Namespace":"AWS/Lambda","MetricName":"Duration"}
+{"AlarmName":"ManageEIPs-Errors","StateValue":"OK","Namespace":"AWS/Lambda","MetricName":"Errors"}
+{"AlarmName":"ManageEIPs-Throttles","StateValue":"OK","Namespace":"AWS/Lambda","MetricName":"Throttles"}
+```
+
+##### 10.10.4 CloudWatch dashboard (overview) 
+##### 10.10.4.1 Creation of a minimal dashboard for Invocations/Errors/Throttles/Duration for the function 
+```bash
+aws cloudwatch put-dashboard --dashboard-name "ManageEIPs-Dashboard" --dashboard-body "$(jq -n --arg r "$AWS_REGION" --arg fn "ManageEIPs" '{widgets:[{type:"metric",x:0,y:0,width:12,height:6,properties:{region:$r,period:300,metrics:[["AWS/Lambda","Invocations","FunctionName",$fn],[".","Errors",".","."],[".","Throttles",".","."],[".","Duration",".",".",{stat:"Average"}]],title:"ManageEIPs Lambda (Invocations/Errors/Throttles/Duration)"}},{type:"metric",x:0,y:6,width:12,height:6,properties:{region:$r,period:300,metrics:[["AWS/Lambda","Duration","FunctionName",$fn,{stat:"p95"}]],title:"ManageEIPs Duration p95"}}]}' )" --region "$AWS_REGION" --no-cli-pager >/dev/null 2>&1; 
+jq -c -n '{DashboardName:"ManageEIPs-Dashboard",Put:true}'
+```
+**Example output:**
+```json
+{"DashboardName":"ManageEIPs-Dashboard","Put":true}
+```
+
+##### 10.10.4.2 Verify dashboard exists (JSONL) 
+```bash
+aws cloudwatch list-dashboards --region "$AWS_REGION" --no-cli-pager | jq -c '.DashboardEntries[]? | select(.DashboardName=="ManageEIPs-Dashboard") | {DashboardName:.DashboardName,LastModified:.LastModified}'
+```
+**Example output:**
+```json
+{"DashboardName":"ManageEIPs-Dashboard","LastModified":"2025-12-28T00:20:10+00:00"}
+```
+
+
 
 ## 11. Advanced Capabilities (Safety, Observability, Multi-Region)
 This section describes architectural and operational capabilities that extend beyond the core Lambda implementation.
@@ -2473,7 +2566,7 @@ Each Region deployment is fully self-contained and includes:
 - a regional EventBridge schedule rule (trigger)
 - a regional CloudWatch Logs log group (created automatically on first invocation)
 - the same IAM execution role (IAM is global, reused across Regions)
-- optional regional alarms / dashboards (if enabled)
+- regional alarms / dashboards
 
 **Key characteristics of this model**
 - **No cross-Region dependencies**
@@ -2525,8 +2618,9 @@ Deploying the solution in multiple AWS Regions introduces incremental costs, but
   Keeping structured, concise logs and avoiding excessive verbosity ensures costs stay minimal. 
   No logs are generated if the function is not invoked.
 
-- **Optional monitoring resources**
-  Additional CloudWatch metrics, alarms, or dashboards (if enabled) may introduce small recurring costs per Region. These are optional and can be limited to the primary Region only.
+- **Monitoring resources**
+  CloudWatch alarms, dashboards, and SNS notifications introduce small recurring costs per Region. 
+  To minimize cost, deploy them only in the primary Region.
 
 **Important cost-control characteristics of the multi-Region model**
 - **No always-on infrastructure:**
@@ -2927,7 +3021,7 @@ We can still commit and push changes normally while documentation is in progress
 ```bash
 git status
 git add ManageEIPs_Automation.md README.md
-git commit -m "docs: update documentation"
+git commit -m "docs: add monitoring (SNS + CW alarms/dashboard) and align multi-region wording"
 git push
 ```
 
@@ -2935,7 +3029,7 @@ git push
 It provides a visible milestone before the final documentation is complete.
 **Create pre-release tag**
 ```bash
-git tag -a v0.1.0 -m "v0.1.0 work in progress (docs not final)"
+git tag -a v1.0.1 -m "Docs: monitoring section + README observability; align section 11 wording"
 git push origin v0.1.0
 ```
 **In GitHub**
@@ -2943,21 +3037,21 @@ git push origin v0.1.0
 - Release title: `v0.1.0` (WIP) > Publish release
 
 #### 13.7.3 Final release when documentation is complete (v1.0.0)
-**Prerequisite: workijg tree clean**
+**Prerequisite: working tree clean**
 ```bash
 git status
 ```
 
 **Create final tag**
 ```bash
-git tag -a v1.0.0 -m "v1.0.0 first portfolio release"
-git push origin v1.0.0
+git tag -a v1.0.1 -m "v1.0.1 first portfolio release"
+git push origin v1.0.1
 ```
 
 **Create GitHub Release (UI)**
-- repo `ManageEIPs-1region` > Releases > Create a new release > Select tag: `v1.0.0` > don't tick "Set as a pre-release"
-- Release title: `v1.0.0` > Publish release
+- repo `ManageEIPs-1region` > Releases > Create a third release > Select tag: `v1.0.1` > don't tick "Set as a pre-release"
+- Release title: `v1.0.1` > Publish release
 
 **Verify**
 - Repo > Releases
-- Confirm `v1.0.0` points to the intended commit.
+- Confirm `v1.0.1` points to the intended commit.

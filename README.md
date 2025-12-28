@@ -30,6 +30,16 @@ For normal operation and cost control, a **monthly** schedule is sufficient (e.g
 
 During testing, you can temporarily set a near-future cron time, validate behavior, then revert to the monthly schedule.
 
+## Observability (CloudWatch + SNS)
+Optional monitoring resources are included to make executions auditable and failures visible:
+- **CloudWatch Logs**: structured JSON logs per invocation (decisions + released count)
+- **CloudWatch Metrics**:
+  - AWS/Lambda: Duration (p95), Errors, Throttles
+  - Custom: ReleasedEIPs (count of released EIPs)
+- **CloudWatch Alarms**: `ManageEIPs-DurationHigh`, `ManageEIPs-Errors`, `ManageEIPs-Throttles`
+- **CloudWatch Dashboard**: `ManageEIPs-Dashboard`
+- **SNS notifications**: alarms can publish to `ManageEIPs-Alarms` (subscriptions optional)
+- 
 ## Multi-Region (design-ready, optional)
 The solution is **Region-agnostic**:
 - Deploy the same stack independently in Region A / Region B
