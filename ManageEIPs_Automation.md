@@ -462,12 +462,12 @@ aws ec2 describe-network-interfaces --filters "Name=subnet-id,Values=subnet-0267
 aws ec2 describe-network-interfaces --region "$AWS_REGION" --no-cli-pager | jq -c '.NetworkInterfaces[]? | (.NetworkInterfaceId as $ENI | (.Attachment.InstanceId // "no-instance") as $Inst | (.InterfaceType // "n/a") as $Ty | (.Status // "unknown") as $St | (.Description // "no-desc") as $Desc | (.SubnetId // "NO-SUBNET") as $Sub | (.VpcId // "NO-VPC") as $V | (.Groups[]? | {GroupId:.GroupId, GroupName:(.GroupName // "NO-SG-NAME"), NetworkInterfaceId:$ENI, InstanceId:$Inst, InterfaceType:$Ty, Status:$St, Description:$Desc, SubnetId:$Sub, VpcId:$V}))'
 ```
 
-**Check dependencies for NAT Gateways (in subnet, with Name + flattened tags = 1 JSON object per line):**
+**Check dependencies for` NAT Gateways` (in subnet, with Name + flattened tags = 1 JSON object per line):**
 ```bash
 aws ec2 describe-nat-gateways --region "$AWS_REGION" --no-cli-pager | jq -c '.NatGateways[]? | ((.Tags // []) as $T | ($T | map(select(.Key=="Name") | .Value) | .[0]) as $Name | (.NatGatewayId as $NG | .State as $St | .SubnetId as $Sub | (if ($T|length)>0 then $T[] else {"Key":"NO-TAGS","Value":"NO-TAGS"} end) | {NatGatewayId:$NG, Name:($Name // "NO-NAME-TAG"), State:$St, SubnetId:$Sub, TagKey:.Key, TagValue:.Value}))'
 ```
 
-**Check dependencies for Internet Gateways (in subnet, with Name + flattened tags = 1 JSON object per line):**
+**Check dependencies for `Internet Gateways` (in subnet, with Name + flattened tags = 1 JSON object per line):**
 ```bash
 aws ec2 describe-internet-gateways --region "$AWS_REGION" --no-cli-pager | jq -c '.InternetGateways[]? | ((.Tags // []) as $T | ($T | map(select(.Key=="Name") | .Value) | .[0]) as $Name | (.InternetGatewayId as $IGW | ((.Attachments // [])[]? // {} ) as $Att | (if ($T|length)>0 then $T[] else {"Key":"NO-TAGS","Value":"NO-TAGS"} end) | {InternetGatewayId:$IGW, Name:($Name // "NO-NAME-TAG"), VpcId:($Att.VpcId // "NO-VPC"), AttachmentState:($Att.State // "NO-ATTACHMENT"), TagKey:.Key, TagValue:.Value}))'
 ```
@@ -1024,14 +1024,14 @@ The only route is 10.0.0.0/16 → local (VPC-internal traffic only)
 
 ## 6. Systems Manager (SSM) Access
 
-### 6.1 IAM prerequisites for Systems Manager (IAM + Agent):
-Goal: ensure the instance can talk to SSM.
+### 6.1 IAM prerequisites for `Systems Manager` (IAM + Agent):
+Goal: ensure the instance can talk to `SSM`.
 It covers:
 - IAM role/policy for EC2
 - SSM Agent presence/running
 
-#### 6.1.1 Identify the EC2 IAM role intended for SSM access
-**First, list candidate roles looking like SSM (show RoleName + RoleArn):**
+#### 6.1.1 Identify the `EC2 IAM role` intended for `SSM access`
+**First, list candidate roles looking like `SSM` (show `RoleName` + `RoleArn`):**
 ```bash
 aws iam list-roles --no-cli-pager | jq -c '.Roles[] | select(.RoleName | test("SSM|ManageEIPs";"i")) | {RoleName:.RoleName, RoleArn:.Arn}'
 ```
@@ -1132,7 +1132,7 @@ It grants the minimum permissions required for Systems Manager (Session Manager,
 aws iam attach-role-policy --role-name "ManageEIPs-EC2SSMRole" --policy-arn "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore" --no-cli-pager
 ```
 
-#### 6.3.2 Attach CloudWatch Agent policy
+#### 6.3.2 Attach `CloudWatch Agent policy`
 The CloudWatch Agent is installed and configured to collect custom OS metrics (disk, memory, swap) and to forward application logs to CloudWatch Logs. 
 Systems Manager alone does not provide these capabilities. 
 The ManageEIPs-EC2SSMRole role therefore includes the CloudWatchAgentServerPolicy in addition to the SSM core permissions.
@@ -1193,8 +1193,8 @@ This is required by the project design and follows least privilege principles.
  
 
 
-## 7. Private Operations Access via VPC Interface Endpoints
-### 7.1 Overview: SSM interface endpoints required
+## 7. Private Operations Access via `VPC Interface Endpoints`
+### 7.1 Overview: `SSM interface endpoints` required
 Goal: Allow the EC2 instance in a private subnet (no IGW, no NAT) to reach SSM services over the AWS network.
 
 SSM requires three interface endpoints (ssm, ec2messages, ssmmessages). 
@@ -1225,17 +1225,17 @@ SSM requires exactly 3 interface endpoints, in the same VPC for 3 VPC Endpoint s
 ### 7.2 Endpoint security group for SSM interface endpoints
 This SG will allow HTTPS from the VPC only to the endpoints.
 
-#### 7.2.1 Create endpoint security group (capture `SSM_EP_SG_ID`)
+#### 7.2.1 Create `endpoint security group` (capture `SSM_EP_SG_ID`)
 ```bash
 SSM_EP_SG_ID=$(aws ec2 create-security-group --group-name "SG_SSM_Endpoints_ManageEIPs" --description "SSM interface endpoints SG" --vpc-id "$VPC_ID" --region "$AWS_REGION" --no-cli-pager | jq -r '.GroupId')
 ```
 
-#### 7.2.2 Apply standard tags to endpoint SG
+#### 7.2.2 Apply standard tags to `endpoint SG`
 ```bash
 aws ec2 create-tags --resources "$SSM_EP_SG_ID" --tags Key=Name,Value="SG_SSM_Endpoints_ManageEIPs" Key=Project,Value="$TAG_PROJECT" Key=Component,Value="SecurityGroup" Key=Environment,Value="$TAG_ENV" Key=Owner,Value="$TAG_OWNER" Key=ManagedBy,Value="$TAG_MANAGEDBY" Key=CostCenter,Value="$TAG_COSTCENTER" --region "$AWS_REGION" --no-cli-pager
 ```
 
-#### 7.2.3 Verify endpoint SG identity and VPC context
+#### 7.2.3 Verify `endpoint SG identity` and `VPC` context
 ```bash
 aws ec2 describe-security-groups --group-ids "$SSM_EP_SG_ID" --region "$AWS_REGION" --no-cli-pager | jq -c '.SecurityGroups[0] | {GroupId:.GroupId, GroupName:.GroupName, NameTag:([.Tags[]? | select(.Key=="Name") | .Value] | first // "MISSING-NAME-TAG"), VpcId:.VpcId}' | while read -r S; 
 do VPC_ID=$(echo "$S" | jq -r '.VpcId'); 
@@ -1269,18 +1269,18 @@ aws ec2 create-tags --resources "$SSM_EP_SG_ID" --tags Key=Name,Value="SG_SSM_En
 }
 ```
 
-#### 7.2.5 Allow HTTPS ingress from VPC CIDR (443)
+#### 7.2.5 Allow HTTPS `ingress from VPC CIDR` (443)
 ```bash
 aws ec2 authorize-security-group-ingress --group-id "$SSM_EP_SG_ID" --protocol tcp --port 443 --cidr "$VPC_CIDR" --region "$AWS_REGION" --no-cli-pager || true
 ```
 
-#### 7.2.6 Tag HTTPS ingress rule
+#### 7.2.6 Tag HTTPS `ingress rule`
 ```bash
 SSM_HTTPS_RULE_ID=$(aws ec2 describe-security-group-rules --filters "Name=group-id,Values=$SSM_EP_SG_ID" --region "$AWS_REGION" --no-cli-pager | jq -r --arg CIDR "$VPC_CIDR" '.SecurityGroupRules[] | select(.IsEgress==false and .IpProtocol=="tcp" and .FromPort==443 and .ToPort==443 and .CidrIpv4==$CIDR) | .SecurityGroupRuleId'); 
 aws ec2 create-tags --resources "$SSM_HTTPS_RULE_ID" --tags Key=Name,Value="SSM-HTTPS-From-VPC" Key=Purpose,Value="Allow SSM interface endpoint access from VPC CIDR" Key=Project,Value="$TAG_PROJECT" Key=Component,Value="SecurityGroupRule" Key=Environment,Value="$TAG_ENV" Key=Owner,Value="$TAG_OWNER" Key=ManagedBy,Value="$TAG_MANAGEDBY" Key=CostCenter,Value="$TAG_COSTCENTER" --region "$AWS_REGION" --no-cli-pager
 ```
 
-#### 7.2.7 Verify HTTPS ingress rule (IDs + Names + VPC context)
+#### 7.2.7 Verify HTTPS `ingress rule` (IDs + Names + VPC context)
 ```bash
 RULE_ID=$(aws ec2 describe-security-group-rules --filters "Name=group-id,Values=$SSM_EP_SG_ID" --region "$AWS_REGION" --no-cli-pager | jq -r --arg CIDR "$VPC_CIDR" '.SecurityGroupRules[] | select(.IsEgress==false and .IpProtocol=="tcp" and .FromPort==443 and .ToPort==443 and .CidrIpv4==$CIDR) | .SecurityGroupRuleId' | head -n 1); 
 aws ec2 describe-security-group-rules --security-group-rule-ids "$RULE_ID" --region "$AWS_REGION" --no-cli-pager | jq -c '.SecurityGroupRules[0] | {SecurityGroupRuleId:.SecurityGroupRuleId, RuleName:([.Tags[]? | select(.Key=="Name") | .Value] | first // "NO-RULE-NAME"), GroupId:.GroupId, IpProtocol:.IpProtocol, FromPort:.FromPort, ToPort:.ToPort, CidrIpv4:.CidrIpv4}' | while read -r R; 
@@ -1309,7 +1309,7 @@ done
 }
 ```
 
-#### 7.2.8 Create the 3 SSM interface endpoints
+#### 7.2.8 Create the 3 `SSM interface endpoints`
 **Create VPC interface endpoint `ssm`:**
 ```bash
 SSM_VPCE_ID=$(aws ec2 create-vpc-endpoint --vpc-id "$VPC_ID" --service-name "com.amazonaws.${AWS_REGION}.ssm" --vpc-endpoint-type Interface --subnet-ids "$SUBNET_ID" --security-group-ids "$SSM_EP_SG_ID" --private-dns-enabled --tag-specifications "ResourceType=vpc-endpoint,Tags=[{Key=Name,Value=VPCE_SSM_ManageEIPs},{Key=Project,Value=$TAG_PROJECT},{Key=Component,Value=VPCE},{Key=Environment,Value=$TAG_ENV},{Key=Owner,Value=$TAG_OWNER},{Key=ManagedBy,Value=$TAG_MANAGEDBY},{Key=CostCenter,Value=$TAG_COSTCENTER}]" --region "$AWS_REGION" --no-cli-pager | jq -r '.VpcEndpoint.VpcEndpointId')
@@ -1320,12 +1320,12 @@ SSM_VPCE_ID=$(aws ec2 create-vpc-endpoint --vpc-id "$VPC_ID" --service-name "com
 EC2MSG_VPCE_ID=$(aws ec2 create-vpc-endpoint --vpc-id "$VPC_ID" --service-name "com.amazonaws.${AWS_REGION}.ec2messages" --vpc-endpoint-type Interface --subnet-ids "$SUBNET_ID" --security-group-ids "$SSM_EP_SG_ID" --private-dns-enabled --tag-specifications "ResourceType=vpc-endpoint,Tags=[{Key=Name,Value=VPCE_EC2Messages_ManageEIPs},{Key=Project,Value=$TAG_PROJECT},{Key=Component,Value=VPCE},{Key=Environment,Value=$TAG_ENV},{Key=Owner,Value=$TAG_OWNER},{Key=ManagedBy,Value=$TAG_MANAGEDBY},{Key=CostCenter,Value=$TAG_COSTCENTER}]" --region "$AWS_REGION" --no-cli-pager | jq -r '.VpcEndpoint.VpcEndpointId')
 ```
 
-**Create VPC interface endpoint `ssmmessages`:**
+**Create `VPC interface endpoint` `ssmmessages`:**
 ```bash
 SSMM_VPCE_ID=$(aws ec2 create-vpc-endpoint --vpc-id "$VPC_ID" --service-name "com.amazonaws.${AWS_REGION}.ssmmessages" --vpc-endpoint-type Interface --subnet-ids "$SUBNET_ID" --security-group-ids "$SSM_EP_SG_ID" --private-dns-enabled --tag-specifications "ResourceType=vpc-endpoint,Tags=[{Key=Name,Value=VPCE_SSMMessages_ManageEIPs},{Key=Project,Value=$TAG_PROJECT},{Key=Component,Value=VPCE},{Key=Environment,Value=$TAG_ENV},{Key=Owner,Value=$TAG_OWNER},{Key=ManagedBy,Value=$TAG_MANAGEDBY},{Key=CostCenter,Value=$TAG_COSTCENTER}]" --region "$AWS_REGION" --no-cli-pager | jq -r '.VpcEndpoint.VpcEndpointId')
 ```
 
-#### 7.2.9 Verify interface endpoints (ID + Name + service + state + subnet + VPC)
+#### 7.2.9 Verify `interface endpoints` (ID + Name + service + state + subnet + VPC)
 **Ensure it ouputs only endpoints with Name not evaluating to `NO-NAME`:**
 ```bash
 aws ec2 describe-vpc-endpoints --vpc-endpoint-ids "$SSM_VPCE_ID" "$EC2MSG_VPCE_ID" "$SSMM_VPCE_ID" --region "$AWS_REGION" --no-cli-pager | jq -c '.VpcEndpoints[] | {VpcEndpointId:.VpcEndpointId, Name:([.Tags[]? | select(.Key=="Name") | .Value] | first // "NO-NAME"), ServiceName:.ServiceName, VpcId:.VpcId, SubnetIds:.SubnetIds, PrivateDnsEnabled:.PrivateDnsEnabled, State:.State}' | while read -r E; 
@@ -1342,8 +1342,8 @@ done
 ```
 
 
-### 7.3 Private EC2 instance for SSM access
-#### 7.3.1 List security groups in the VPC (selection step)
+### 7.3 `Private EC2` instance for `SSM` access
+#### 7.3.1 List `security groups` in the `VPC` (selection step)
 ```bash
 aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$VPC_ID" --region "$AWS_REGION" --no-cli-pager | jq '.SecurityGroups[] | {GroupId:.GroupId, GroupName:.GroupName, NameTag:([.Tags[]? | select(.Key=="Name") | .Value] | first // "NO-NAME-TAG"), VpcId:.VpcId}'
 ```
@@ -1363,7 +1363,7 @@ aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$VPC_ID" --region
 }
 ```
 
-#### 7.3.2 EC2 security group:**
+#### 7.3.2 `EC2 security group`:**
 We can't use "SG_SSM_Endpoints_ManageEIPs". 
 This SG was created for the VPC endpoints ENIs, not for the instance. 
 It currently allows inbound 443 from 10.0.0.0/16. 
@@ -1372,18 +1372,18 @@ Therefore, we are creating a new one:
 - inbound: keep it minimal (often none, unless your app needs something).
 - outbound: must allow 443 to reach the endpoint ENIs (default SG egress allows all, which would be fine).
 
-##### 7.3.2.1 Create EC2 security group (capture `EC2_SG_ID`)
+##### 7.3.2.1 Create `EC2 security group` (capture `EC2_SG_ID`)
 ```bash
 EC2_SG_ID=$(aws ec2 create-security-group --group-name "SG_EC2_ManageEIPs" --description "Least-privilege EC2 SG (SSM via VPC endpoints, no public access)" --vpc-id "$VPC_ID" --region "$AWS_REGION" --no-cli-pager | jq -r '.GroupId'); 
 aws ec2 create-tags --resources "$EC2_SG_ID" --tags Key=Name,Value="SG_EC2_ManageEIPs" Key=Project,Value=ManageEIPs --region "$AWS_REGION" --no-cli-pager
 ```
 
-**Apply standard tags to EC2 security group:**
+**Apply standard tags to `EC2 security group`:**
 ```bash
 aws ec2 create-tags --resources "$EC2_SG_ID" --tags Key=Name,Value="SG_EC2_ManageEIPs" Key=Project,Value="$TAG_PROJECT" Key=Component,Value="SecurityGroup" Key=Environment,Value="$TAG_ENV" Key=Owner,Value="$TAG_OWNER" Key=ManagedBy,Value="$TAG_MANAGEDBY" Key=CostCenter,Value="$TAG_COSTCENTER" --region "$AWS_REGION" --no-cli-pager
 ```
 
-##### 7.3.2.2 Verify EC2 SG identity and VPC context
+##### 7.3.2.2 Verify `EC2 SG` identity and `VPC` context
 ```bash
 aws ec2 describe-security-groups --group-ids "$EC2_SG_ID" --region "$AWS_REGION" --no-cli-pager | jq -c '.SecurityGroups[0] | {GroupId:.GroupId, GroupName:.GroupName, NameTag:([.Tags[]? | select(.Key=="Name") | .Value] | first // "NO-NAME-TAG"), VpcId:.VpcId}' | while read -r S; 
 do VPC_NAME=$(aws ec2 describe-vpcs --vpc-ids "$(echo "$S" | jq -r '.VpcId')" --region "$AWS_REGION" --no-cli-pager | jq -r '.Vpcs[0] | ([.Tags[]? | select(.Key=="Name") | .Value] | first // "NO-VPC-NAME")'); 
@@ -1416,7 +1416,7 @@ aws ec2 create-tags --resources "$EC2_SG_ID" --tags Key=Name,Value="SG_EC2_Manag
 }
 ```
 
-##### 7.3.2.4 Least-privilege egress: remove default allow-all
+##### 7.3.2.4 Least-privilege `egress`: remove default allow-all
 This is because when we create a new security group, AWS automatically adds a default egress rule:
 **Outbound: ALL protocols (-1) to 0.0.0.0/0**
 So:
@@ -1424,7 +1424,7 @@ So:
 aws ec2 revoke-security-group-egress --group-id "$EC2_SG_ID" --ip-permissions '[{"IpProtocol":"-1","IpRanges":[{"CidrIp":"0.0.0.0/0"}]}]' --region "$AWS_REGION" --no-cli-pager
 ```
 
-##### 7.3.2.5 Verify egress is empty
+##### 7.3.2.5 Verify `egress` is empty
 ```bash
 aws ec2 describe-security-groups --group-ids "$EC2_SG_ID" --region "$AWS_REGION" --no-cli-pager | jq -c '.SecurityGroups[0] | {GroupId:.GroupId, GroupName:.GroupName, NameTag:([.Tags[]? | select(.Key=="Name") | .Value] | first // "MISSING-NAME-TAG"), VpcId:.VpcId, Egress:[.IpPermissionsEgress[]? | {Protocol:.IpProtocol, FromPort:(.FromPort // "n/a"), ToPort:(.ToPort // "n/a"), CIDRs:[.IpRanges[]?.CidrIp]}]}' | while read -r S; 
 do VPC_ID=$(echo "$S" | jq -r '.VpcId'); VPC_NAME=$(aws ec2 describe-vpcs --vpc-ids "$VPC_ID" --region "$AWS_REGION" --no-cli-pager | jq -r '.Vpcs[0] | ([.Tags[]? | select(.Key=="Name") | .Value] | first // "NO-VPC-NAME")'); 
@@ -1443,7 +1443,7 @@ done
 }
 ```
 
-##### 7.3.2.6 SG-to-SG HTTPS tunnel (EC2 → VPCE SG)
+##### 7.3.2.6 `SG-to-SG` HTTPS tunnel (`EC2` → `VPCE SG`)
 **Goal:**
 Allow EC2 to:
 - initiate HTTPS (443)
@@ -1453,7 +1453,7 @@ Allow EC2 to:
 - Endpoint SG ingress → EC2 SG
 This creates a closed HTTPS tunnel between the instance and SSM.
 
-###### 7.3.2.6.1 Add HTTPS egress to endpoint SG only (443)
+###### 7.3.2.6.1 Add `HTTPS egress` to `endpoint SG` only (443)
 In the command below:
 - EC2 can open HTTPS connections only if the destination ENI belongs to SG_SSM_Endpoints_ManageEIPs.
 - No CIDR, no wildcard, no internet.
@@ -1464,7 +1464,7 @@ OUT=$(aws ec2 authorize-security-group-egress --group-id "$EC2_SG_ID" --ip-permi
 EC2_EGRESS_HTTPS_RULE_ID=$(echo "$OUT" | jq -r '.SecurityGroupRules[0].SecurityGroupRuleId'); aws ec2 create-tags --resources "$EC2_EGRESS_HTTPS_RULE_ID" --tags Key=Name,Value="RULE_EC2_to_SSMVPCE_443" Key=Purpose,Value="EC2 egress HTTPS to SSM VPCE SG only" Key=Project,Value="$TAG_PROJECT" Key=Component,Value="SecurityGroupRule" Key=Environment,Value="$TAG_ENV" Key=Owner,Value="$TAG_OWNER" Key=ManagedBy,Value="$TAG_MANAGEDBY" Key=CostCenter,Value="$TAG_COSTCENTER" --region "$AWS_REGION" --no-cli-pager
 ```
 
-###### 7.3.2.6.2 Verify both SGs (IDs + Names + VPC)
+###### 7.3.2.6.2 Verify both `SGs` (`IDs` + Names + `VPC`)
 ```bash
 aws ec2 describe-security-groups --group-ids "$EC2_SG_ID" "$SSM_EP_SG_ID" --region "$AWS_REGION" --no-cli-pager | jq -c '.SecurityGroups[] | {GroupId:.GroupId, GroupName:.GroupName, NameTag:([.Tags[]? | select(.Key=="Name") | .Value] | first // "MISSING-NAME-TAG"), VpcId:.VpcId}' | while read -r S; 
 do VPC_ID=$(echo "$S" | jq -r '.VpcId'); 
@@ -1490,7 +1490,7 @@ done
 }
 ```
 
-###### 7.3.2.6.3 Verify egress destination SG (EC2 → endpoint SG)
+###### 7.3.2.6.3 Verify `egress destination SG` (`EC2` → `endpoint SG`)
 ```bash
 aws ec2 describe-security-groups --group-ids "$EC2_SG_ID" --region "$AWS_REGION" --no-cli-pager | jq -c '.SecurityGroups[0] | {EC2GroupId:.GroupId, EC2GroupName:.GroupName, EC2NameTag:([.Tags[]? | select(.Key=="Name") | .Value] | first // "MISSING-NAME-TAG"), VpcId:.VpcId, EgressToSG:([.IpPermissionsEgress[]? | select(.IpProtocol=="tcp" and .FromPort==443 and .ToPort==443) | .UserIdGroupPairs[]?.GroupId] | unique)}' | while read -r O; 
 do VPC_ID=$(echo "$O" | jq -r '.VpcId'); 
@@ -1520,13 +1520,13 @@ done
 }
 ```
 
-#### 7.3.3 Launch EC2 instance in private subnet (capture `INSTANCE_ID`)
+#### 7.3.3 Launch EC2 instance in `private subnet` (capture `INSTANCE_ID`)
 **Run instance (capture `INSTANCE_ID`):**
 ```bash
 INSTANCE_ID=$(aws ec2 run-instances --image-id "$AMI_ID" --instance-type "t3.micro" --subnet-id "$SUBNET_ID" --security-group-ids "$EC2_SG_ID" --iam-instance-profile Name="ManageEIPs-EC2SSMInstanceProfile" --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=ManageEIPs-ec2},{Key=Project,Value=$TAG_PROJECT},{Key=Component,Value=EC2},{Key=Environment,Value=$TAG_ENV},{Key=Owner,Value=$TAG_OWNER},{Key=ManagedBy,Value=$TAG_MANAGEDBY},{Key=CostCenter,Value=$TAG_COSTCENTER}]" --region "$AWS_REGION" --no-cli-pager | jq -r '.Instances[0].InstanceId')
 ```
 
-#### 7.3.4 Verify instance identity and placement (Subnet + VPC names):
+#### 7.3.4 Verify instance identity and placement (`Subnet` + `VPC` names):
 ```bash
 aws ec2 describe-instances --instance-ids "$INSTANCE_ID" --region "$AWS_REGION" --no-cli-pager | jq -c '.Reservations[0].Instances[0] | {InstanceId:.InstanceId, NameTag:([.Tags[]? | select(.Key=="Name") | .Value] | first // "MISSING-NAME-TAG"), InstanceType:.InstanceType, SubnetId:.SubnetId, VpcId:.VpcId, State:.State.Name}' | while read -r I; 
 do SUBNET_ID=$(echo "$I" | jq -r '.SubnetId'); 
@@ -1552,12 +1552,12 @@ done
 
  
 
-## 8. Systems Manager Connectivity Verification
+## 8. `Systems Manager` Connectivity Verification
 This project does not use EC2 key pairs.
 All access is performed via AWS Systems Manager Session Manager, as the EC2 instance runs in a private subnet with no direct network access.
 
-### 8.1 EC2 instance registered in Systems Manager
-#### 8.1.1 Retrieve EC2 Instance IDs with enforced Name tags
+### 8.1 EC2 instance registered in `Systems Manager`
+#### 8.1.1 Retrieve `EC2 Instance IDs` with enforced Name tags
 ```bash
 aws ec2 describe-instances --region "$AWS_REGION" --no-cli-pager | jq -c '[.Reservations[].Instances[] | {InstanceId,InstanceName:(((.Tags//[])|map(select(.Key=="Name")|.Value)|.[0])//"MISSING-INSTANCE-NAME")}]'
 ```
@@ -1566,8 +1566,8 @@ aws ec2 describe-instances --region "$AWS_REGION" --no-cli-pager | jq -c '[.Rese
 [{"InstanceId":"i-0c69cfce5294ffdd4","InstanceName":"ManageEIPs-ec2"}]
 ```
 
-#### 8.1.2 Verify the instance is visible to SSM
-**Retrieve Systems Manager–registered instances:**
+#### 8.1.2 Verify the instance is visible to `SSM`
+**Retrieve `Systems Manager–registered instances`:**
 ```bash
 aws ssm describe-instance-information --region "$AWS_REGION" --no-cli-pager | jq '.InstanceInformationList'
 ```
@@ -1600,7 +1600,7 @@ aws ssm describe-instance-information --region "$AWS_REGION" --no-cli-pager | jq
 ]
 ```
 
-#### 8.1.3 Join SSM status with EC2 Name tags (IDs + Names)
+#### 8.1.3 Join `SSM status` with `EC2 Name tags` (`IDs` + `Names`)
 ```bash
 jq -c -s '.[0] as $SSM | .[1] as $EC2 | [$SSM[] | .InstanceId as $id | {InstanceId:$id,InstanceName:(([$EC2[]|select(.InstanceId==$id)|.InstanceName][0])//"MISSING-INSTANCE-NAME"),PingStatus:.PingStatus,PlatformName:.PlatformName,IPAddress:.IPAddress}]' <(aws ssm describe-instance-information --region "$AWS_REGION" --no-cli-pager | jq '.InstanceInformationList') <(aws ec2 describe-instances --region "$AWS_REGION" --no-cli-pager | jq '[.Reservations[].Instances[] | {InstanceId,InstanceName:(((.Tags//[])|map(select(.Key=="Name")|.Value)|.[0])//"MISSING-INSTANCE-NAME")}]')
 ```
@@ -1619,8 +1619,8 @@ jq -c -s '.[0] as $SSM | .[1] as $EC2 | [$SSM[] | .InstanceId as $id | {Instance
 - SourceType = AWS::EC2::Instance → ✔ native EC2 registration (not hybrid)
 
 
-### 8.2 SSM Agent status on EC2 (later)
-#### 8.2.1 Verify SSM Agent status indirectly (SSM Online + agent version) with `InstanceName` attached
+### 8.2 `SSM Agent status` on `EC2` (later)
+#### 8.2.1 Verify `SSM Agent status` indirectly (`SSM Online` + `agent version`) with `InstanceName` attached
 <u>Purpose</u>: 
 Prove the agent is running/reachable by checking **PingStatus** + **AgentVersion** from SSM, joined to EC2 Name.
 
@@ -1644,7 +1644,7 @@ jq -s '.[0] as $SSM | .[1] as $EC2 | [$SSM[] | .InstanceId as $id | {InstanceId:
 ]
 ```
 
-#### 8.2.2 Verify SSM Agent service status on the instance (Session Manager, no SSH), with `InstanceName` attached
+#### 8.2.2 Verify `SSM Agent service status` on the instance (`Session Manager`, no `SSH`), with `InstanceName` attached
 <u>Purpose</u>: 
 Run OS-level checks (*systemctl*) via SSM, output includes the instance Name.
 
@@ -1656,7 +1656,7 @@ aws ssm send-command --region "$AWS_REGION" --no-cli-pager --document-name "AWS-
 {"CommandId":"0e2020e9-2cd8-4174-8aeb-8fa327692855"}
 ```
 
-#### 8.2.3 Retrieve command output (pair InstanceId with `InstanceName`, no naked IDs)
+#### 8.2.3 Retrieve command output (pair `InstanceId` with `InstanceName`, no naked `IDs`)
 <u>Purpose</u>: 
 fetch results per instance and print ID + Name + output (paste `CommandId` into $CMD_ID).
 
@@ -1690,7 +1690,7 @@ Goal: 3 EIPs total
 
 Use the WSL dry-run wrapper before letting Lambda run for real
 
-### 9.1 Allocate EIP (to attach): `EIP_Attached_ManageEIPs`
+### 9.1 Allocate `EIP` (to attach): `EIP_Attached_ManageEIPs`
 <u>Purpose</u>: 
 Create the EIP with full tags, then immediately print AllocationId + Name.
 
@@ -1703,7 +1703,7 @@ EIP_ALLOC_ID=$(aws ec2 allocate-address --domain vpc --tag-specifications "Resou
 ```
 
 
-### 9.2 Attach EIP to EC2 dynamically
+### 9.2 Attach `EIP` to `EC2` dynamically
 <u>Purpose</u>: 
 Attach the tagged EIP to ManageEIPs-ec2 and print IDs + Names + PublicIp.
 
@@ -1716,8 +1716,8 @@ ASSOC_ID=$(aws ec2 associate-address --region "$AWS_REGION" --no-cli-pager --ins
 ```
 
 
-### 9.3 Create unused Elastic IPs (cost-control / Lambda test fixtures)
-#### 9.3.1 Create first unused EIP
+### 9.3 Create unused `Elastic IPs` (cost-control / `Lambda` test fixtures)
+#### 9.3.1 Create first `unused EIP`
 <u>Purpose</u>: 
 Allocate an unused EIP for testing / release logic, and immediately display AllocationId + Name.
 
@@ -1730,7 +1730,7 @@ aws ec2 describe-addresses --region "$AWS_REGION" --no-cli-pager --allocation-id
 [{"AllocationId":"eipalloc-0cb2c1dd93ad66184","Name":"EIP_Unused1_ManageEIPs","PublicIp":"100.52.71.230"}]
 ```
 
-#### 9.3.2 Create second unused EIP
+#### 9.3.2 Create second `unused EIP`
 <u>Purpose</u>: 
 Allocate a second unused EIP to validate multi-resource handling in Lambda logic.
 
@@ -1754,8 +1754,8 @@ aws ec2 describe-addresses --region "$AWS_REGION" --no-cli-pager --allocation-id
 
 ## 10. Lambda
 ### 10.0 Cleanup
-#### 10.0.1 Customer-managed IAM policies
-##### 10.0.1.1 List customer-managed IAM policies (cleanup scope)
+#### 10.0.1 `Customer-managed IAM policies`
+##### 10.0.1.1 List `customer-managed IAM policies` (cleanup scope)
 **Purpose:**
 List only customer-managed IAM policies with Name + ARN together (no naked IDs).
 
@@ -1781,7 +1781,7 @@ aws iam list-policies --scope Local --no-cli-pager | jq -c '.Policies[] | {Polic
 {"PolicyName":"AWSLambdaBasicExecutionRole-a016dbd5-d99b-461a-95c2-ed19c8beb320","PolicyArn":null}
 ```
 
-##### 10.0.1.2 Detach each policy from all roles (required)
+##### 10.0.1.2 Detach each `policy` from all `role`s` (required)
 **Purpose:**
 Policies cannot be deleted while attached.
 
@@ -1793,7 +1793,7 @@ done;
 done
 ```
 
-##### 10.0.1.3 Delete all customer-managed policies
+##### 10.0.1.3 Delete all `customer-managed policies`
 **Purpose:**
 Remove all non-default versions for the remaining customer-managed policy(ies), then delete them.
 
@@ -1806,7 +1806,7 @@ aws iam delete-policy --policy-arn "$ARN" --no-cli-pager && echo "DELETED $ARN" 
 done
 ```
 
-##### 10.0.1.4 Verify: no customer-managed policies remain
+##### 10.0.1.4 Verify: no `customer-managed policies` remain
 **Purpose:**
 Confirm clean slate.
 
@@ -1814,8 +1814,8 @@ Confirm clean slate.
 aws iam list-policies --scope Local --no-cli-pager | jq -c '.Policies[] | {PolicyName,PolicyArn: .Arn}'  # no output
 ```
 
-#### 10.0.2 IAM roles (customer-created only)
-##### 10.0.2.1 List Lambda execution roles (by trust policy):
+#### 10.0.2 `IAM roles` (customer-created only)
+##### 10.0.2.1 List `Lambda execution roles` (by trust policy):
 ```bash
 aws iam list-roles --no-cli-pager | jq -r '.Roles[] | select(.AssumeRolePolicyDocument.Statement[].Principal.Service=="lambda.amazonaws.com") | .RoleName' # no output
 ```
@@ -1877,7 +1877,7 @@ aws iam list-roles --no-cli-pager | jq -c '.Roles[].RoleName'
 "ManageEIPs-EC2SSMRole"
 ```
 
-#### 10.0.3 Lambda functions
+#### 10.0.3 `Lambda functions`
 **Purpose:**
 Functions implicitly recreate roles/policies later.
 Delete all project Lambdas if doing a true reset.
@@ -1886,7 +1886,7 @@ Delete all project Lambdas if doing a true reset.
 aws lambda list-functions --region "$AWS_REGION" --no-cli-pager | jq -r '.Functions[].FunctionName' # no output
 ```
 
-#### 10.0.4 Lambda resource policies (invoke permissions)
+#### 10.0.4 `Lambda resource policies` (`invoke permissions`)
 **Why:**
 Stale EventBridge / scheduler permissions linger.
 
@@ -1900,7 +1900,7 @@ done
 ```
 No output.
 
-#### 10.0.5 EventBridge rules
+#### 10.0.5 `EventBridge rules`
 **Why:**
 Rules re-attach permissions automatically.
 
@@ -1908,7 +1908,7 @@ Rules re-attach permissions automatically.
 - Delete all project rules.
 - Ignore default AWS rules.
 
-##### 10.0.5.1 List EventBridge rules:
+##### 10.0.5.1 List `EventBridge rules`:
 ```bash
 aws events list-rules --region "$AWS_REGION" --no-cli-pager | jq -r '.Rules[].Name'
 ```
@@ -1922,7 +1922,7 @@ tempstop-nat-0235
 tempstop-nat-0335
 ```
 
-##### 10.0.5.2 Delete EventBridge listed rules
+##### 10.0.5.2 Delete `EventBridge listed rules`
 **Delete the listed rules safely:**
 ```bash
 for r in LambdaEC2DailySnapshot-LambdaEC2DailySnapshotDailyS-043x91XkQkno start-nat-2300 stop-nat-2359 tempstop-nat-0235 tempstop-nat-0335; 
@@ -1938,7 +1938,7 @@ done
 aws events list-rules --region "$AWS_REGION" --no-cli-pager | jq -r '.Rules[].Name' | egrep 'LambdaEC2DailySnapshot|start-nat-2300|stop-nat-2359|tempstop-nat-0235|tempstop-nat-0335' || true       # no output
 ```
 
-#### 10.0.6 CloudWatch log groups
+#### 10.0.6 `CloudWatch log groups`
 **Why:** 
 */aws/lambda/* persists after Lambda deletion.
 - They are CloudWatch Logs log group automatically created by AWS Lambda.
@@ -1950,7 +1950,7 @@ aws events list-rules --region "$AWS_REGION" --no-cli-pager | jq -r '.Rules[].Na
 **What the command does:**
 Delete all project log groups.
 
-##### 10.0.6.1 List all the /aws/Lambda/* log groups:
+##### 10.0.6.1 List all the /aws/`Lambda/* log groups`:
 ```bash
 aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/" --region "$AWS_REGION" --no-cli-pager | jq -r '.logGroups[].logGroupName'
 ```
@@ -1969,7 +1969,7 @@ aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/" --region "$A
 /aws/lambda/translation-function
 ```
 
-##### 10.0.6.2 Delete all Lambda log groups (clean slate)
+##### 10.0.6.2 Delete all `Lambda log groups` (clean slate)
 **Purpose:**
 Remove all leftover Lambda log groups for deleted/old functions.
 
@@ -1984,22 +1984,22 @@ done
 aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/" --region "$AWS_REGION" --no-cli-pager | jq -r '.logGroups[].logGroupName'       # no output
 ```
 
-#### 10.0.7 CloudWatch alarms & dashboards
+#### 10.0.7 `CloudWatch alarms` & `dashboards`
 **Why:** 
 Monitoring resources survive function deletion.
 
-##### 10.0.7.1 List all alarms and dashboards
-**List alarms:** 
+##### 10.0.7.1 List all `alarms` and `dashboards`
+**List `alarms`:** 
 ```bash
 aws cloudwatch describe-alarms --region "$AWS_REGION" --no-cli-pager | jq -r '.MetricAlarms[].AlarmName'  # no output
 ```
 
-**List dashboards:** 
+**List `dashboards`:**
 ```bash
 aws cloudwatch list-dashboards --region "$AWS_REGION" --no-cli-pager | jq -r '.DashboardEntries[].DashboardName'  # no output
 ```
 
-##### 10.0.7.2 Delete all alarms and dashboards
+##### 10.0.7.2 Delete all `alarms` and `dashboards`
 No output means that there were alarms or dashboards to delete.
 
 **Clean slate achieved as:**
@@ -2070,15 +2070,15 @@ Archive:  function.zip
 Result: shows every file inside the ZIP, letting you confirm lambda_function.py is present at the root level, which is required for the Lambda handler to work.
 
 
-### 10.2 Verify no Lambda execution role exists (post-cleanup)
-**List Lambda execution roles (by trust policy):**
+### 10.2 Verify no `Lambda execution role` exists (post-cleanup)
+**List `Lambda execution roles` (by `trust policy`):**
 ```bash
 aws iam list-roles --no-cli-pager | jq -r '.Roles[] | select(.AssumeRolePolicyDocument.Statement[].Principal.Service=="lambda.amazonaws.com") | .RoleName'          # no output
 ```
 
 
-### 10.3 Create the Lambda execution role (from scratch)
-#### 10.3.1 Create IAM role with trust policy and tags (variable assignment + full tagging + reusable filter + AWS name ≠ `NameTag`)
+### 10.3 Create the `Lambda execution role` (from scratch)
+#### 10.3.1 Create `IAM role` with `trust policy` and tags (variable assignment + full tagging + `reusable filter` + AWS name `NameTag`)
 ```bash
 ROLE_NAME="ManageEIPsLambdaRole"; 
 NAME_TAG="IAMRole_ManageEIPsLambdaRole"; 
@@ -2090,7 +2090,7 @@ aws iam get-role --role-name "$ROLE_NAME" --no-cli-pager | jq -c -L . --arg arn 
 {"RoleName":"ManageEIPsLambdaRole","RoleArn":"arn:aws:iam::180294215772:role/ManageEIPsLambdaRole","NameTag":"IAMRole_ManageEIPsLambdaRole"}
 ```
 
-#### 10.3.2 Attach the basic execution policy (CloudWatch Logs) to the role
+#### 10.3.2 Attach the basic `execution policy` (`CloudWatch Logs`) to the `role`
 **Purpose:**
 Give the Lambda role the minimum permissions to write logs to `/aws/lambda/....`
 
@@ -2104,8 +2104,8 @@ aws iam attach-role-policy --role-name "$ROLE_NAME" --policy-arn "arn:aws:iam::a
 ```
 
 
-### 10.4 Create the Lambda function
-#### 10.4.1 Provision Lambda resource (`ZIP`, role, tags, description, using variable assignment & reusable `jq` filter)
+### 10.4 Create the `Lambda` function
+#### 10.4.1 Provision `Lambda` resource (`ZIP`, role, tags, description, using variable assignment & `reusable jq filter`)
 **Purpose:**
 - Create a Lambda function called "ManageEIPs", using our packaged ZIP and the role ARN.
 - Then print FunctionName + NameTag + FunctionArn (no naked IDs).
@@ -2133,7 +2133,7 @@ echo "{\"FunctionName\":\"$FUNCTION_NAME\",\"PublishedVersion\":\"$VERSION\"}"
 ```
 **Expected output (first version is Nr 2 as we had to delete the function and recreate it):**
 
-#### 10.4.3 Create alias live pointing to that version (best practice)
+#### 10.4.3 Create `alias` live pointing to that version (best practice)
 **Purpose:**
 Create a stable alias for invocations (later EventBridge should target the alias, not $LATEST).
 
@@ -2148,7 +2148,7 @@ aws lambda get-alias --function-name "$FUNCTION_NAME" --name "$ALIAS_NAME" --reg
 ```
 
 
-### 10.5 Invoke the Lambda via the alias (best practice, no $LATEST)
+### 10.5 Invoke the `Lambda` via the `alias` (best practice, no $LATEST)
 **Purpose:**
 Run a first real test against the stable alias live, and capture the response.
 
@@ -2167,7 +2167,7 @@ aws lambda invoke --function-name "ManageEIPs:live" --cli-binary-format raw-in-b
 Lambda ran, but the handler threw an exception (unhandled). 
 The real error is in response.json and/or CloudWatch Logs.
 
-#### 10.5.1 Inspect the Lambda invocation response (shows the exception payload)
+#### 10.5.1 Inspect the `Lambda` invocation response (shows the exception payload)
 ```bash
 jq -c '{statusCode:(.statusCode//null),errorType:(.errorType//null),errorMessage:(.errorMessage//null),stackTrace:(.stackTrace//null)}' response.json
 ```
@@ -2177,7 +2177,7 @@ jq -c '{statusCode:(.statusCode//null),errorType:(.errorType//null),errorMessage
 ```
 It confirms the timeout issue.
 
-#### 10.5.2 Read the latest CloudWatch log stream for the alias execution (shows the full traceback):
+#### 10.5.2 Read the latest `CloudWatch log stream` for the `alias` execution (shows the full traceback):
 ```bash
 STREAM=$(aws logs describe-log-streams --log-group-name "/aws/lambda/ManageEIPs" --order-by LastEventTime --descending --limit 1 --region "$AWS_REGION" --no-cli-pager | jq -r '.logStreams[0].logStreamName'); 
 aws logs get-log-events --log-group-name "/aws/lambda/ManageEIPs" --log-stream-name "$STREAM" --limit 200 --region "$AWS_REGION" --no-cli-pager | jq -r '.events[] | "\(.timestamp/1000|strftime("%Y-%m-%d %H:%M:%S UTC"))  \(.message|rtrimstr("\n"))"'
@@ -2192,7 +2192,7 @@ aws logs get-log-events --log-group-name "/aws/lambda/ManageEIPs" --log-stream-n
 ```
 Again, confirmation of the timeout issue.
 
-#### 10.5.3 Increase timeout from 3 to 10 seconds (keep best-practice output: name + ARN)
+#### 10.5.3 Increase timeout from 3 to 10 seconds (keep best-practice output: name + `ARN`)
 ```bash
 LAMBDA_TIMEOUT=10; 
 V=$(aws lambda update-function-configuration --function-name "$FUNCTION_NAME" --timeout "$LAMBDA_TIMEOUT" --region "$AWS_REGION" --no-cli-pager >/dev/null && aws lambda wait function-updated --function-name "$FUNCTION_NAME" --region "$AWS_REGION" --no-cli-pager && aws lambda publish-version --function-name "$FUNCTION_NAME" --region "$AWS_REGION" --no-cli-pager | jq -r '.Version'); 
@@ -2214,7 +2214,7 @@ aws lambda wait function-updated --function-name "$FUNCTION_NAME" --region "$AWS
 {"FunctionName":"ManageEIPs","Timeout":10,"FunctionArn":"arn:aws:lambda:us-east-1:180294215772:function:ManageEIPs","LastUpdateStatus":"Successful"}
 ```
 
-#### 10.5.5 Re-invoke via alias (best practice):
+#### 10.5.5 Re-invoke via `alias `(best practice):
 ```bash
 aws lambda invoke --function-name "ManageEIPs:live" --cli-binary-format raw-in-base64-out --payload '{}' --region "$AWS_REGION" --no-cli-pager response.json
 ```
@@ -2239,7 +2239,7 @@ So, the Lambda role only has AWSLambdaBasicExecutionRole (logs).
 It has no EC2 permissions, so ec2:DescribeAddresses is denied.
 
 
-### 10.6 Attach the EC2 read permissions to the Lambda role (best practice: least privilege for this project)
+### 10.6 Attach the `EC2 read permissions` to the `Lambda role` (best practice: least privilege for this project)
 **Purpose:**
 Allow the function to list/describe EIPs (and tags), so it can decide what to release.
 
@@ -2253,7 +2253,7 @@ POLICY_ARN=$(aws iam create-policy --policy-name "$POLICY_NAME" --policy-documen
 ```
 
 
-### 10.7 Publish a new version and repoint alias live (because aliases pin versions)
+### 10.7 Publish a new version and repoint `alias` live (because aliases pin versions)
 ```bash
 V=$(aws lambda publish-version --function-name "$FUNCTION_NAME" --region "$AWS_REGION" --no-cli-pager | jq -r '.Version'); 
 aws lambda update-alias --function-name "$FUNCTION_NAME" --name "$ALIAS_NAME" --function-version "$V" --region "$AWS_REGION" --no-cli-pager >/dev/null; 
@@ -2265,7 +2265,7 @@ aws lambda get-alias --function-name "$FUNCTION_NAME" --name "$ALIAS_NAME" --reg
 ```
 
 
-### 10.8 Re-invoke via alias (validation)
+### 10.8 Re-invoke via `alias` (validation)
 ```bash
 aws lambda invoke --function-name "$FUNCTION_NAME:$ALIAS_NAME" --cli-binary-format raw-in-base64-out --payload '{}' --region "$AWS_REGION" --no-cli-pager response.json
 ```
@@ -2291,14 +2291,14 @@ jq -c '.' response.json
 Status: PASS — Lambda executed successfully via alias live.
 
 
-### 10.9 Verify Elastic IP state after Lambda execution
+### 10.9 Verify `Elastic IP state` after `Lambda` execution
 **Purpose:**
 Confirm functional correctness:
 - attached EIP still present and associated with ManageEIPs-ec2.
 - unused EIPs that match the release criteria have been released.
 - no protected or unmanaged EIPs were touched.
 
-#### 10.9.1 List and inspect all Elastic IPs after Lambda execution
+#### 10.9.1 List and inspect all `Elastic IPs` after `Lambda` execution
 
 ```bash
 aws ec2 describe-addresses --region "$AWS_REGION" --no-cli-pager | jq -L . 'include "tag_helpers"; [.Addresses[] | {AllocationId,NameTag:(must_tag_name(.)),PublicIp,InstanceId:(.InstanceId//null),ManagedBy:(tag_value(.;"ManagedBy")),Protection:(tag_value(.;"Protection"))}]'
@@ -2497,7 +2497,7 @@ aws cloudwatch put-metric-alarm --alarm-name "ManageEIPs-Errors" --alarm-descrip
 {"AlarmName":"ManageEIPs-Errors","Created":true}
 ```
 
-##### 10.10.3.2 Alarm: Throttles 
+##### 10.10.3.2 Alarm: Throttles
 ```bash
 aws cloudwatch put-metric-alarm --alarm-name "ManageEIPs-Throttles" --alarm-description "Lambda Throttles >= 1" --namespace "AWS/Lambda" --metric-name "Throttles" --dimensions Name=FunctionName,Value=ManageEIPs --statistic Sum --period 300 --evaluation-periods 1 --threshold 1 --comparison-operator GreaterThanOrEqualToThreshold --treat-missing-data notBreaching --alarm-actions "$SNS_TOPIC_ARN" --region "$AWS_REGION" --no-cli-pager >/dev/null 2>&1; jq -c -n '{AlarmName:"ManageEIPs-Throttles",Created:true}'
 ```
@@ -2506,7 +2506,7 @@ aws cloudwatch put-metric-alarm --alarm-name "ManageEIPs-Throttles" --alarm-desc
 {"AlarmName":"ManageEIPs-Throttles","Created":true}
 ```
 
-##### 10.10.3.3 Alarm: Duration (p95) 
+##### 10.10.3.3 Alarm: Duration (p95)
 ```bash
 aws cloudwatch put-metric-alarm --alarm-name "ManageEIPs-DurationHigh" --alarm-description "Lambda Duration p95 >= 3000ms" --namespace "AWS/Lambda" --metric-name "Duration" --dimensions Name=FunctionName,Value=ManageEIPs --extended-statistic p95 --period 300 --evaluation-periods 1 --threshold 3000 --comparison-operator GreaterThanOrEqualToThreshold --treat-missing-data notBreaching --alarm-actions "$SNS_TOPIC_ARN" --region "$AWS_REGION" --no-cli-pager >/dev/null 2>&1; jq -c -n '{AlarmName:"ManageEIPs-DurationHigh",Created:true}'
 ```
@@ -2515,7 +2515,7 @@ aws cloudwatch put-metric-alarm --alarm-name "ManageEIPs-DurationHigh" --alarm-d
 {"AlarmName":"ManageEIPs-DurationHigh","Created":true}
 ```
 
-##### 10.10.3.4 Verify alarms exist (JSONL, one object per alarm) 
+##### 10.10.3.4 Verify alarms exist (JSONL, one object per alarm)
 ```bash
 aws cloudwatch describe-alarms --alarm-names "ManageEIPs-Errors" "ManageEIPs-Throttles" "ManageEIPs-DurationHigh" --region "$AWS_REGION" --no-cli-pager | jq -c '.MetricAlarms[]? | {AlarmName:.AlarmName,StateValue:.StateValue,Namespace:.Namespace,MetricName:.MetricName}'
 ```
@@ -2526,8 +2526,8 @@ aws cloudwatch describe-alarms --alarm-names "ManageEIPs-Errors" "ManageEIPs-Thr
 {"AlarmName":"ManageEIPs-Throttles","StateValue":"OK","Namespace":"AWS/Lambda","MetricName":"Throttles"}
 ```
 
-##### 10.10.4 CloudWatch dashboard (overview) 
-##### 10.10.4.1 Creation of a minimal dashboard for Invocations/Errors/Throttles/Duration for the function 
+##### 10.10.4 CloudWatch dashboard (overview)
+##### 10.10.4.1 Creation of a minimal dashboard for Invocations/Errors/Throttles/Duration for the function
 ```bash
 aws cloudwatch put-dashboard --dashboard-name "ManageEIPs-Dashboard" --dashboard-body "$(jq -n --arg r "$AWS_REGION" --arg fn "ManageEIPs" '{widgets:[{type:"metric",x:0,y:0,width:12,height:6,properties:{region:$r,period:300,metrics:[["AWS/Lambda","Invocations","FunctionName",$fn],[".","Errors",".","."],[".","Throttles",".","."],[".","Duration",".",".",{stat:"Average"}]],title:"ManageEIPs Lambda (Invocations/Errors/Throttles/Duration)"}},{type:"metric",x:0,y:6,width:12,height:6,properties:{region:$r,period:300,metrics:[["AWS/Lambda","Duration","FunctionName",$fn,{stat:"p95"}]],title:"ManageEIPs Duration p95"}}]}' )" --region "$AWS_REGION" --no-cli-pager >/dev/null 2>&1; 
 jq -c -n '{DashboardName:"ManageEIPs-Dashboard",Put:true}'
@@ -2642,10 +2642,10 @@ Overall, the multi-Region deployment model provides high architectural flexibili
 The solution is validated using a progressive testing strategy that prioritizes safety, observability, and cost control.
 Testing is designed to confirm correct behavior without risking accidental modification or release of Elastic IP resources.
 
-#### 11.4.1 Test data preparation (unused Elastic IPs)
+#### 11.4.1 Test data preparation (`unused Elastic IPs`)
 Preparation of controlled test conditions required to validate the Lambda function, including the recreation of unused Elastic IPs after prior cleanup operations.
 
-##### 11.4.1.1 Recreate first unused Elastic IP
+##### 11.4.1.1 Recreate first `unused Elastic IP`
 ```bash
 EIP_UNUSED1_ALLOC_ID=$(aws ec2 allocate-address --region "$AWS_REGION" --domain vpc --tag-specifications "ResourceType=elastic-ip,Tags=[{Key=Name,Value=EIP_Unused1_ManageEIPs},{Key=Project,Value=$TAG_PROJECT},{Key=Environment,Value=$TAG_ENV},{Key=Owner,Value=$TAG_OWNER},{Key=ManagedBy,Value=$TAG_MANAGEDBY},{Key=CostCenter,Value=$TAG_COSTCENTER}]" --no-cli-pager | jq -r '.AllocationId'); 
 aws ec2 describe-addresses --region "$AWS_REGION" --no-cli-pager --allocation-ids "$EIP_UNUSED1_ALLOC_ID" | jq -c '[.Addresses[] | {AllocationId,Name:(((.Tags//[])|map(select(.Key=="Name")|.Value)|.[0])//"MISSING-EIP-NAME"),PublicIp}]'
@@ -2655,7 +2655,7 @@ aws ec2 describe-addresses --region "$AWS_REGION" --no-cli-pager --allocation-id
 [{"AllocationId":"eipalloc-06b9574f9e8fed2d7","Name":"EIP_Unused1_ManageEIPs","PublicIp":"54.204.14.253"}]
 ```
 
-##### 11.4.1.2 Recreate second unused Elastic IP
+##### 11.4.1.2 Recreate second `unused Elastic IP`
 ```bash
 EIP_UNUSED2_ALLOC_ID=$(aws ec2 allocate-address --region "$AWS_REGION" --domain vpc --tag-specifications "ResourceType=elastic-ip,Tags=[{Key=Name,Value=EIP_Unused2_ManageEIPs},{Key=Project,Value=$TAG_PROJECT},{Key=Environment,Value=$TAG_ENV},{Key=Owner,Value=$TAG_OWNER},{Key=ManagedBy,Value=$TAG_MANAGEDBY},{Key=CostCenter,Value=$TAG_COSTCENTER}]" --no-cli-pager | jq -r '.AllocationId'); 
 aws ec2 describe-addresses --region "$AWS_REGION" --no-cli-pager --allocation-ids "$EIP_UNUSED2_ALLOC_ID" | jq -c '[.Addresses[] | {AllocationId,Name:(((.Tags//[])|map(select(.Key=="Name")|.Value)|.[0])//"MISSING-EIP-NAME"),PublicIp}]'
@@ -2665,7 +2665,7 @@ aws ec2 describe-addresses --region "$AWS_REGION" --no-cli-pager --allocation-id
 [{"AllocationId":"eipalloc-036a044d806b80d83","Name":"EIP_Unused2_ManageEIPs","PublicIp":"18.234.11.69"}]
 ```
 
-##### 11.4.1.3 ag the two AllocationIds as `ManagedBy`=`ManageEIPs` (run once per EIP, or combine)
+##### 11.4.1.3 ag the two `AllocationIds` as `ManagedBy`=`ManageEIPs` (run once per `EIP`, or combine)
 **Create the tags:**
 ```bash
 aws ec2 create-tags --resources "eipalloc-06b9574f9e8fed2d7" "eipalloc-036a044d806b80d83" --tags Key=ManagedBy,Value="ManageEIPs" --region "$AWS_REGION" --no-cli-pager
@@ -2681,7 +2681,7 @@ aws ec2 describe-addresses --allocation-ids "eipalloc-06b9574f9e8fed2d7" "eipall
 {"AllocationId":"eipalloc-06b9574f9e8fed2d7","PublicIp":"54.204.14.253","Tags":[{"Key":"Project","Value":"ManageEIPs"},{"Key":"Owner","Value":"Malik"},{"Key":"Environment","Value":"dev"},{"Key":"Name","Value":"EIP_Unused1_ManageEIPs"},{"Key":"ManagedBy","Value":"ManageEIPs"},{"Key":"CostCenter","Value":"Portfolio"}]} 
 ```
 
-#### 11.4.2 Dry-run / safety mode validation
+#### 11.4.2 `Dry-run` / safety mode validation
 The Lambda function supports a dry-run mode in which all actions are evaluated and logged but no changes are applied to AWS resources.
 This mode is used as the primary validation mechanism to confirm:
 - correct discovery of Elastic IPs in the Region
@@ -2722,7 +2722,7 @@ This testing and validation strategy ensures that the solution can be safely dep
 
 ## 12. EventBridge
 
-### 12.1 Create the monthly EventBridge rule
+### 12.1 Create the monthly `EventBridge rule`
 The rule is configured to run at 22:00 UTC on the 25th of each month.
 ```bash
 RULE_ARN=$(aws events put-rule --name "CheckAndReleaseUnassociatedEIPs-Monthly" --schedule-expression "cron(0 22 16 * ? *)" --state ENABLED --region "$AWS_REGION" --no-cli-pager | jq -r '.RuleArn')
@@ -2737,7 +2737,7 @@ aws events put-rule --name "CheckAndReleaseUnassociatedEIPs-Monthly" --schedule-
 {"RuleArn":"arn:aws:events:us-east-1:180294215772:rule/CheckAndReleaseUnassociatedEIPs-Monthly"}
 ```
 
-### 12.2 Verify the EventBridge rule
+### 12.2 Verify the `EventBridge` rule
 ```bash
 aws events describe-rule --name "CheckAndReleaseUnassociatedEIPs-Monthly" --region "$AWS_REGION" --no-cli-pager | jq -c '{Name,ScheduleExpression,State}'
 ```
@@ -2746,7 +2746,7 @@ aws events describe-rule --name "CheckAndReleaseUnassociatedEIPs-Monthly" --regi
 {"Name":"CheckAndReleaseUnassociatedEIPs-Monthly","ScheduleExpression":"cron(40 2 25 * ? *)","State":"ENABLED"}
 ```
 
-### 12.3 Allow EventBridge to invoke the Lambda function
+### 12.3 Allow `EventBridge` to invoke the `Lambda` function
 ```bash
 ACCOUNT_ID=$(aws sts get-caller-identity --no-cli-pager | jq -r '.Account'); aws lambda add-permission --function-name "ManageEIPs" --statement-id "AllowEventBridgeMonthlyTrigger" --action "lambda:InvokeFunction" --principal "events.amazonaws.com" --source-arn "arn:aws:events:${AWS_REGION}:${ACCOUNT_ID}:rule/CheckAndReleaseUnassociatedEIPs-Monthly" --region "$AWS_REGION" --no-cli-pager | jq
 ```
@@ -2758,7 +2758,7 @@ ACCOUNT_ID=$(aws sts get-caller-identity --no-cli-pager | jq -r '.Account'); aws
 ```
 
 
-### 12.4 Add Lambda as the target of the monthly rule
+### 12.4 Add `Lambda` as the `target` of the monthly `rule`
 ```bash
 aws events put-targets --rule "CheckAndReleaseUnassociatedEIPs-Monthly" --targets "[{\"Id\":\"ManageEIPs\",\"Arn\":\"$LAMBDA_ARN\"}]" --region "$AWS_REGION" --no-cli-pager | jq
 ```
@@ -2771,7 +2771,7 @@ aws events put-targets --rule "CheckAndReleaseUnassociatedEIPs-Monthly" --target
 ```
 
 
-### 12.5 Verify targets are attached
+### 12.5 Verify `targets` are attached
 ```bash
 aws events list-targets-by-rule --rule "CheckAndReleaseUnassociatedEIPs-Monthly" --region "$AWS_REGION" --no-cli-pager | jq -c
 ```
@@ -2783,7 +2783,7 @@ aws events list-targets-by-rule --rule "CheckAndReleaseUnassociatedEIPs-Monthly"
 
 ## 13. GitHub (Repository Publishing & Portfolio Standards)
 ### 13.1 Repository purpose and scope
-**Purpose:** 
+**Purpose:**
 - Publish the ManageEIPs automation as a clean, reproducible portfolio repository: infrastructure templates, Lambda code, 
   and helper jq filters, with instructions to deploy and run.
 
@@ -2802,7 +2802,7 @@ Project root folder: `ManageEIPs-1region`
 git init
 ```
 
-**Expected output: Git created the repo and - by default - started on branch `master`, instead of `main`** 
+**Expected output: Git created the repo and - by default - started on branch `master`, instead of `main`**
 ```text
 Using 'master' as the name for the initial branch. This default branch name is subject to change.
 ```
@@ -2836,7 +2836,7 @@ git status
         tag_helpers.jq
 ```
 
-#### 13.2.4 Configure `Git author identity` (mandatory for first commit)
+#### 13.2.4 Configure `Git author identity` (mandatory for first `commit`)
 ```bash
 git config --global user.name "Malik Hamdane"
 git config --global user.email "mfhamdane@hotmail.com"
@@ -2871,7 +2871,7 @@ Thumbs.db
 EOF
 ```
 
-#### 13.2.6 Stage what should be published and create the first commit
+#### 13.2.6 Stage what should be published and create the first `commit`
 ```bash
 git add .gitignore README.md ManageEIPs_Automation.md lambda_function.py manage-eips-policy.json manage-eips-trust.json *.jq
 git commit -m "chore: initialize repo with docs, lambda, and jq helpers"
@@ -3052,6 +3052,30 @@ git push origin v1.0.1
 - repo `ManageEIPs-1region` > Releases > Create a third release > Select tag: `v1.0.1` > don't tick "Set as a pre-release"
 - Release title: `v1.0.1` > Publish release
 
+**Create final tag**
+```bash
+git tag -a v1.0.1 -m "v1.0.1 second portfolio release"
+git push origin v1.0.1
+```
+
+**Commit updated files**
+```bash
+git status
+git add ManageEIPs_Automation.md README.md
+git commit -m "docs: Cleaned up formatting (removed trailing spaces, etc...)"
+git push
+```
+
+**Create final tag**
+```bash
+git tag -a v1.0.2 -m "v1.0.2 third portfolio release"
+git push origin v1.0.2
+```
+
+**Create GitHub Release (UI)**
+- repo `ManageEIPs-1region` > Releases > Create a third release > Select tag: `v1.0.2` > don't tick "Set as a pre-release"
+- Release title: v1.0.2 third portfolio release > Publish release
+
 **Verify**
 - Repo > Releases
-- Confirm `v1.0.1` points to the intended commit.
+- Confirm `v1.0.2` points to the intended commit.

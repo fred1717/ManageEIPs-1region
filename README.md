@@ -1,10 +1,10 @@
-# ManageEIPs — Automated Cleanup of Unassociated Elastic IPs (EIPs)
+# ManageEIPs — Automated Cleanup of `Unassociated Elastic IPs` (EIPs)
 
 ## Problem
 Unassociated Elastic IPs incur hourly AWS charges and are easy to forget.
 
 ## Solution
-This project deploys an **AWS Lambda** function that periodically scans Elastic IPs in a Region and releases **only** those that are:
+This project deploys an **AWS Lambda** function that periodically scans `Elastic IPs` in a Region and releases **only** those that are:
 - **unassociated** (not attached to an instance/network interface), and
 - **in-scope** via tags (**ManagedBy=ManageEIPs**), and
 - **not protected** (**Protection≠DoNotRelease**).
@@ -12,23 +12,23 @@ This project deploys an **AWS Lambda** function that periodically scans Elastic 
 Scheduling is handled by **Amazon EventBridge** (cron rule).
 
 ## Safety model (Dry-Run first)
-The Lambda supports a **Dry-Run / safety mode** where it evaluates and logs actions but makes **no changes**.
+The `Lambda supports` a **Dry-Run / safety mode** where it evaluates and logs actions but makes **no changes**.
 
 Recommended workflow:
-1) Deploy → run Dry-Run → review logs/metrics  
+1) Deploy → run `Dry-Run` → review `logs/metrics`  
 2) Enable real execution (`dry_run=false`) only after validation
 
 ## Architecture (single Region)
-- **EventBridge rule** (scheduled) → invokes Lambda
-- **Lambda** lists EIPs in the Region
+- **EventBridge rule** (scheduled) → invokes `Lambda`
+- **Lambda** lists `EIPs` in the Region
 - Applies **tag-based scope + protection checks**
-- Releases qualifying unused EIPs
+- Releases qualifying `unused EIPs`
 - Emits **structured CloudWatch logs (JSON)** and optional metrics (FinOps angle)
 
 ## Scheduling (recommended)
-For normal operation and cost control, a **monthly** schedule is sufficient (e.g. **02:00 UTC on the 25th**).
+For normal operation and cost control, a **monthly** `schedule` is sufficient (e.g. **02:00 UTC on the 25th**).
 
-During testing, you can temporarily set a near-future cron time, validate behavior, then revert to the monthly schedule.
+During testing, you can temporarily set a near-future `cron` time, validate behavior, then revert to the monthly schedule.
 
 ## Observability (CloudWatch + SNS)
 Optional monitoring resources are included to make executions auditable and failures visible:
@@ -42,10 +42,10 @@ Optional monitoring resources are included to make executions auditable and fail
 - 
 ## Multi-Region (design-ready, optional)
 The solution is **Region-agnostic**:
-- Deploy the same stack independently in Region A / Region B
+- Deploy the same `stack` independently in Region A / Region B
 - No code changes required
-- Each Region has its own EventBridge schedule and operates only on local EIPs
-- IAM is global and can be reused; operational visibility and costs remain per-Region
+- Each Region has its own `EventBridge schedule` and operates only on local `EIPs`
+- `IAM` is global and can be reused; operational visibility and costs remain per-Region
 
 ## Operational standards enforced in this repo
 This repository intentionally follows strict “portfolio-grade” operational discipline:
@@ -64,27 +64,27 @@ This repository intentionally follows strict “portfolio-grade” operational d
 ## Repository contents
 **Tracked (published) files**
 - `ManageEIPs_Automation.md` — end-to-end build + verification (includes **Section 13: GitHub**)
-- `lambda_function.py` — Lambda function source
-- `manage-eips-policy.json` — least-privilege IAM policy documents used in the build
-- `manage-eips-trust.json` — IAM trust policy document for the Lambda execution role
-- `*.jq` — reusable jq filters (`flatten_tags.jq`, `tag_helpers.jq`, etc.)
+- `lambda_function.py` — `Lambda` function source
+- `manage-eips-policy.json` — `least-privilege IAM policy` documents used in the build
+- `manage-eips-trust.json` — `IAM trust policy` document for the `Lambda execution role`
+- `*.jq` — `reusable jq filters` (`flatten_tags.jq`, `tag_helpers.jq`, etc.)
 
 **Not tracked (intentionally excluded via `.gitignore`)**
-- secrets/keys (`*.pem`, `*.key`, `.env*`, etc.)
-- build artifacts (`*.zip`)
+- `secrets/keys` (`*.pem`, `*.key`, `.env*`, etc.)
+- build `artifacts` (`*.zip`)
 - local scratch outputs (`response*.json`, `event.json`)
 - IDE folders (`.vs/`, `.vscode/`, `.idea/`)
 
 ## Publishing to GitHub (summary)
 Full, click-by-click + CLI instructions are in `ManageEIPs_Automation.md` (**Section 13**), including:
-- local repo initialization, `.gitignore`, and first commit
+- local repository initialization, `.gitignore`, and first `commit`
 - GitHub repo creation + HTTPS remote
-- PAT-based authentication for `git push` (GitHub no longer accepts account passwords for HTTPS git operations)
+- `PAT-based authentication` for `git push` (GitHub no longer accepts account passwords for HTTPS git operations)
 - post-push verification and “no-secrets” sanity checks (`git ls-files` / `git grep` patterns)
 
 ## Release / versioning
 The documentation is actively being refined. Until it is final:
-- consider an annotated **pre-release tag** such as `v0.1.0` and mark it as a **pre-release** on GitHub
+- consider an annotated **pre-release tag** such as `v0.1.0` and mark it as a **pre-release** on `GitHub`
 - create the final `v1.0.0` tag only when both `ManageEIPs_Automation.md` and this README are final
 
 ## Documentation
@@ -94,4 +94,4 @@ The documentation is actively being refined. Until it is final:
 ## Status
 ✔ Working  
 ✔ Tested (manual + scheduled)  
-✔ Safe-by-design via Dry-Run + tag-based scope
+✔ Safe-by-design via `Dry-Run` + tag-based scope
